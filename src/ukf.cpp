@@ -54,6 +54,37 @@ UKF::UKF() {
    * TODO: Complete the initialization. See ukf.h for other member properties.
    * Hint: one or more values initialized above might be wildly off...
    */
+
+  // State dimension
+  n_x_ = 5;
+
+  // Augmented state dimension
+  n_aug_ = 7;
+
+  // Sigma point spreading parameter
+  lambda_ = 3 - n_aug_;
+
+  // Weights of sigma points
+//  Eigen::VectorXd weights_;
+
+  weights_.resize(2*n_aug_+1);
+
+  double weight_0 = lambda_/(lambda_+n_aug_);
+  double weight = 0.5/(lambda_+n_aug_);
+  weights_(0) = weight_0;
+
+  for (int i=1; i<2*n_aug_+1; ++i) {
+    weights_(i) = weight;
+  }
+
+  // state vector: [pos1 pos2 vel_abs yaw_angle yaw_rate] in SI units and rad
+  x_.resize(n_x_);
+
+  // state covariance matrix
+  P_.resize(n_x_, n_x_);
+
+  // predicted sigma points matrix
+  Xsig_pred_.resize(n_x_, 2 * n_aug_ + 1);
 }
 
 UKF::~UKF() {}
