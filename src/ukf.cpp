@@ -16,7 +16,7 @@ using Eigen::VectorXd;
 UKF::UKF() {
   std::cout << "UKF Init Start"<< std::endl;
   // if this is false, laser measurements will be ignored (except during init)
-  use_laser_ = false;
+  use_laser_ = true;
 
   // if this is false, radar measurements will be ignored (except during init)
   use_radar_ = true;
@@ -319,6 +319,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
      }
 
      // mean predicted measurement
+     z_pred.fill(0.0);
      for (int i = 0; i < 2*n_aug_+1; ++i) {
        z_pred = z_pred + weights_(i) * Zsig.col(i);
      }
@@ -328,6 +329,10 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
      for (int i = 0; i < 2 * n_aug_ + 1; ++i) {  // 2n+1 simga points
        // residual
        VectorXd z_diff = Zsig.col(i) - z_pred;
+
+       // angle normalization
+       while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
+       while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
 
        S = S + weights_(i) * z_diff * z_diff.transpose();
      }
@@ -350,6 +355,10 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
        // state difference
        VectorXd x_diff = Xsig_pred_.col(i) - x_;
+
+       // angle normalization
+       while (x_diff(3)> M_PI) x_diff(3)-=2.*M_PI;
+       while (x_diff(3)<-M_PI) x_diff(3)+=2.*M_PI;
 
        Tc = Tc + weights_(i) * x_diff * z_diff.transpose();
      }
@@ -427,7 +436,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     std::cout << "Updated state S: " << std::endl << S << std::endl;
     std::cout << "UpdateRadar 02" << std::endl;
      // add measurement noise covariance matrix
-     MatrixXd R = MatrixXd(3, 3);
+     MatrixXd R = MatrixXd(n_z, n_z);
 
      R << std_radr_*std_radr_, 0, 0,
           0, std_radphi_*std_radphi_, 0,
