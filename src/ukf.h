@@ -95,6 +95,12 @@ class UKF {
 
   // Sigma point spreading parameter
   double lambda_;
+
+  // Radar measurement noise covariance matrix
+  Eigen::VectorXd R_radar_;
+
+  // Radar measurement noise covariance matrix
+  Eigen::VectorXd R_laser_;
 };
 
 #endif  // UKF_H

@@ -7,6 +7,9 @@
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
+
+#define EPSILON 0.001  // Small number compared to zero
+
 /**
  * Initializes Unscented Kalman filter
  */
@@ -24,10 +27,10 @@ UKF::UKF() {
   P_ = MatrixXd(5, 5);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 0.75; // initial 30
+  std_a_ = 1.5; // initial 30
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 0.65; // initial 30
+  std_yawdd_ = 0.57; // initial 30
   
   /**
    * DO NOT MODIFY measurement noise values below.
@@ -74,9 +77,9 @@ UKF::UKF() {
 
   double weight_0 = lambda_/(lambda_+n_aug_);
   double weight = 0.5/(lambda_+n_aug_);
-  weights_(0) = weight_0;
 
-  for (int i=1; i<2*n_aug_+1; ++i) {
+  weights_(0) = weight_0;
+  for (int i = 1; i < weights_.size(); ++i) {
     weights_(i) = weight;
   }
 
@@ -89,6 +92,17 @@ UKF::UKF() {
   // predicted sigma points matrix
   Xsig_pred_.resize(n_x_, 2 * n_aug_ + 1);
   Xsig_pred_.fill(0.0);
+
+  R_radar_.resize(3, 3);
+  R_radar_ <<  std_radr_*std_radr_, 0, 0,
+               0, std_radphi_*std_radphi_, 0,
+               0, 0,std_radrd_*std_radrd_;
+
+  R_laser_.resize(2, 2);
+  R_laser_ <<  std_laspx_*std_laspx_, 0,
+               0, std_laspy_*std_laspy_;
+
+  std::cout << "UKF Init"<< std::endl;
 }
 
 UKF::~UKF() {}
@@ -102,49 +116,63 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
     if (is_initialized_ == false) {
         std::cout << "Initialize x_ and P_" << std::endl;
-        if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
-            x_(0) = meas_package.raw_measurements_(0);
-            x_(1) = meas_package.raw_measurements_(1);
-            x_(2) = 0.5;
-            x_(3) = 0.5;
-            x_(4) = 0.5;
-            is_initialized_ = true;
-        }
+        // Initialize covariance matrix
         P_ << 1, 0, 0, 0, 0,
               0, 1, 0, 0, 0,
               0, 0, 1, 0, 0,
               0, 0, 0, 1, 0,
               0, 0, 0, 0, 1;
-        for (int i = 0; i < Xsig_pred_.cols(); i++) {
-            Xsig_pred_(0,i) = x_(0);
-            Xsig_pred_(1,i) = x_(1);
-            Xsig_pred_(2,i) = 1;
-            Xsig_pred_(3,i) = 1;
-            Xsig_pred_(4,i) = 1;
+
+        if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
+            double rho = meas_package.raw_measurements_(0);
+            double phi = meas_package.raw_measurements_(1);
+            double rho_dot = meas_package.raw_measurements_(2);
+
+            double px = rho * cos(phi);
+            double py = rho * sin(phi);
+            double vx = rho_dot * cos(phi);
+            double vy = rho_dot * sin(phi);
+            double v = sqrt(vx*vx + vy*vy);
+
+            x_(0) = px;
+            x_(1) = py;
+            x_(2) = v;
+            x_(3) = 0;
+            x_(4) = 0;
+
+        } else if (meas_package.sensor_type_ == MeasurementPackage::LASER) {
+            x_(0) = meas_package.raw_measurements_(0);
+            x_(1) = meas_package.raw_measurements_(1);
+            x_(2) = 0;
+            x_(3) = 0;
+            x_(4) = 0;
+
+            if (std::fabs(x_(0)) < EPSILON and fabs(x_(1)) < EPSILON) {
+                x_(0) = EPSILON;
+                x_(1) = EPSILON;
+            }
         }
 
+        // Safe the initial timestamp for dt
+        time_us_ = meas_package.timestamp_;
         std::cout << "Init state x: " << std::endl << x_ << std::endl;
         std::cout << "Init state covariance P: " << std::endl << P_ << std::endl;
-//        return;
+        is_initialized_ = true;
+        return;
     }
 
-    if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
-        if (use_radar_)
+    double dt = (meas_package.timestamp_ - time_us_);
+    dt /= 1000000.0; // convert [us]->[s]
+    time_us_ = meas_package.timestamp_;
+
+    Prediction(dt);
+
+    if (meas_package.sensor_type_ == MeasurementPackage::RADAR && use_radar_) {
             UpdateRadar(meas_package);
     }
-//    if (meas_package.sensor_type_ == MeasurementPackage::LASER) {
-//        if (use_laser_)
-//            UpdateLidar(meas_package);
-//    } else if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
-//        if (use_radar_)
-//            UpdateRadar(meas_package);
-//    } else {
-//        std::cout << "Unknown sensor type measurement" << std::endl;
-//    }
-
-//    if (is_initialized_ == false) {
-//        is_initialized_ = true;
-//    }
+    if (meas_package.sensor_type_ == MeasurementPackage::LASER && use_laser_) {
+            UpdateLidar(meas_package);
+    }
 }
 
 void UKF::Prediction(double delta_t) {
@@ -299,9 +327,8 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
      }
 
      // add measurement noise covariance matrix
-     MatrixXd R = MatrixXd(n_z,n_z);
-     R <<  std_laspx_*std_laspx_, 0,
-           0, std_laspy_*std_laspy_;
+     MatrixXd R = R_laser_;
+
      S = S + R;
 
      // create matrix for cross correlation Tc
@@ -391,10 +418,8 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     std::cout << "Updated state S: " << std::endl << S << std::endl;
     std::cout << "UpdateRadar 02" << std::endl;
      // add measurement noise covariance matrix
-     MatrixXd R = MatrixXd(n_z,n_z);
-     R <<  std_radr_*std_radr_, 0, 0,
-           0, std_radphi_*std_radphi_, 0,
-           0, 0,std_radrd_*std_radrd_;
+     MatrixXd R = R_radar_;
+
      S = S + R;
     std::cout << "UpdateRadar 03" << std::endl;
     std::cout << "Updated state S: " << std::endl << S << std::endl;
