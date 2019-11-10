@@ -101,6 +101,13 @@ class UKF {
 
   // Radar measurement noise covariance matrix
   Eigen::VectorXd R_laser_;
+
+  // Current NIS for radar
+  double NIS_radar_;
+  // Current NIS for lidar
+  double NIS_laser_;
+
+
 };
 
 #endif  // UKF_H
