@@ -140,7 +140,16 @@ public:
     			double v2 = sin(yaw)*v;
 				estimate << traffic[i].ukf.x_[0], traffic[i].ukf.x_[1], v1, v2;
 				tools.estimations.push_back(estimate);
-	
+                std::cout << traffic[i].ukf.x_[0]
+                          << " " << gt(0)
+                          << " " << traffic[i].ukf.x_[1]
+                          << " " << gt(1)
+                          << " " << v1
+                          << " " << gt(2)
+                          << " " << v2
+                          << " " << gt(3)
+                          << " " << traffic[i].ukf.NIS_laser_
+                          << " " << traffic[i].ukf.NIS_radar_ << std::endl;
 			}
 		}
 		viewer->addText("Accuracy - RMSE:", 30, 300, 20, 1, 1, 1, "rmse");

@@ -8,7 +8,7 @@ using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
 
-#define EPSILON 0.001  // Small number compared to zero
+#define EPSILON 0.00001  // Small number compared to zero
 
 /**
  * Initializes Unscented Kalman filter
@@ -27,10 +27,10 @@ UKF::UKF() {
   P_ = MatrixXd(5, 5);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 12; // initial 30
+  std_a_ = 1; // initial 30
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = 0.75; // initial 30
+  std_yawdd_ = 1; // initial 30
   
   /**
    * DO NOT MODIFY measurement noise values below.
@@ -102,11 +102,12 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
     if (is_initialized_ == false) {
         // Initialize covariance matrix
-        P_ << 1, 0, 0, 0, 0,
-              0, 1, 0, 0, 0,
-              0, 0, 1, 0, 0,
-              0, 0, 0, 1, 0,
-              0, 0, 0, 0, 1;
+        double dv = 0.2;
+        P_ << dv, 0, 0, 0, 0,
+              0, dv, 0, 0, 0,
+              0, 0, dv, 0, 0,
+              0, 0, 0, dv/10, 0,
+              0, 0, 0, 0, dv/10;
 
         if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
             double rho = meas_package.raw_measurements_(0);
@@ -347,7 +348,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
      VectorXd z_diff = meas_package.raw_measurements_ - z_pred;
 
      // calculate NIS
-     NIS_radar_ = z_diff.transpose() * S.inverse() * z_diff;
+     NIS_laser_ = z_diff.transpose() * S.inverse() * z_diff;
 
      // update state mean and covariance matrix
      x_ = x_ + K * z_diff;
