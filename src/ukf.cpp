@@ -14,6 +14,7 @@ using Eigen::VectorXd;
  * Initializes Unscented Kalman filter
  */
 UKF::UKF() {
+  std::cout << "UKF Init Start"<< std::endl;
   // if this is false, laser measurements will be ignored (except during init)
   use_laser_ = false;
 
@@ -71,8 +72,6 @@ UKF::UKF() {
   lambda_ = 3 - n_aug_;
 
   // Weights of sigma points
-//  Eigen::VectorXd weights_;
-
   weights_.resize(2*n_aug_+1);
 
   double weight_0 = lambda_/(lambda_+n_aug_);
@@ -93,16 +92,16 @@ UKF::UKF() {
   Xsig_pred_.resize(n_x_, 2 * n_aug_ + 1);
   Xsig_pred_.fill(0.0);
 
-  R_radar_.resize(3, 3);
-  R_radar_ <<  std_radr_*std_radr_, 0, 0,
-               0, std_radphi_*std_radphi_, 0,
-               0, 0,std_radrd_*std_radrd_;
+//  R_radar_ = MatrixXd(3, 3);
+//  R_radar_ <<  std_radr_*std_radr_, 0, 0,
+//               0, std_radphi_*std_radphi_, 0,
+//               0, 0,std_radrd_*std_radrd_;
 
-  R_laser_.resize(2, 2);
-  R_laser_ <<  std_laspx_*std_laspx_, 0,
-               0, std_laspy_*std_laspy_;
+//  R_laser_ = MatrixXd(2, 2);
+//  R_laser_ <<  std_laspx_*std_laspx_, 0,
+//               0, std_laspy_*std_laspy_;
 
-  std::cout << "UKF Init"<< std::endl;
+  std::cout << "UKF Init End!"<< std::endl;
 }
 
 UKF::~UKF() {}
@@ -185,12 +184,15 @@ void UKF::Prediction(double delta_t) {
     std::cout << "Prediction delta_t=" <<delta_t<< std::endl;
     // create augmented mean vector
     VectorXd x_aug = VectorXd(n_aug_);
+    x_aug.fill(0.0);
 
     // create augmented state covariance
     MatrixXd P_aug = MatrixXd(n_aug_, n_aug_);
+    P_aug.fill(0.0);
 
     // create augmented covariance matrix
     MatrixXd Q_aug = MatrixXd(2, 2);
+    Q_aug.fill(0.0);
     Q_aug(0,0) = std_a_*std_a_;
     Q_aug(1,1) = std_yawdd_*std_yawdd_;
 
@@ -233,7 +235,7 @@ void UKF::Prediction(double delta_t) {
         double px_p, py_p;
 
         // avoid division by zero
-        if (fabs(yawd) > 0.0001) {
+        if (fabs(yawd) > EPSILON) {
             px_p = p_x + v/yawd * ( sin (yaw + yawd*delta_t) - sin(yaw));
             py_p = p_y + v/yawd * ( cos(yaw) - cos(yaw+yawd*delta_t) );
         } else {
@@ -262,11 +264,15 @@ void UKF::Prediction(double delta_t) {
       }
 
       // predicted state mean
+      x_.fill(0.0);
       for (int i = 0; i < 2 * n_aug_ + 1; ++i) {  // iterate over sigma points
         x_ = x_ + weights_(i) * Xsig_pred_.col(i);
       }
 
+//      x_ = Xsig_pred_*weights_;
+
       // predicted state covariance matrix
+      P_.fill(0.0);
       for (int i = 0; i < 2 * n_aug_ + 1; ++i) {  // iterate over sigma points
         // state difference
         VectorXd x_diff = Xsig_pred_.col(i) - x_;
@@ -274,7 +280,7 @@ void UKF::Prediction(double delta_t) {
         while (x_diff(3)> M_PI) x_diff(3)-=2.*M_PI;
         while (x_diff(3)<-M_PI) x_diff(3)+=2.*M_PI;
 
-        P_ = P_ + weights_(i) * x_diff * x_diff.transpose() ;
+        P_ = P_ + weights_(i) * x_diff * x_diff.transpose();
       }
 
       std::cout << "Predict state x: " << std::endl << x_ << std::endl;
@@ -327,7 +333,10 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
      }
 
      // add measurement noise covariance matrix
-     MatrixXd R = R_laser_;
+     MatrixXd R = MatrixXd(2, 2);
+
+     R << std_laspx_*std_laspx_, 0,
+          0, std_laspy_*std_laspy_;
 
      S = S + R;
 
@@ -418,7 +427,11 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     std::cout << "Updated state S: " << std::endl << S << std::endl;
     std::cout << "UpdateRadar 02" << std::endl;
      // add measurement noise covariance matrix
-     MatrixXd R = R_radar_;
+     MatrixXd R = MatrixXd(3, 3);
+
+     R << std_radr_*std_radr_, 0, 0,
+          0, std_radphi_*std_radphi_, 0,
+          0, 0,std_radrd_*std_radrd_;
 
      S = S + R;
     std::cout << "UpdateRadar 03" << std::endl;
