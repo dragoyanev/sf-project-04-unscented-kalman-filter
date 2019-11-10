@@ -1,6 +1,7 @@
 #include "ukf.h"
 
 #include <iostream>
+#include <cmath>
 
 #include "Eigen/Dense"
 
@@ -8,7 +9,7 @@ using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
 
-#define EPSILON 0.00001  // Small number compared to zero
+#define EPSILON 0.001  // Small number compared to zero
 
 /**
  * Initializes Unscented Kalman filter
@@ -145,17 +146,36 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
         return;
     }
 
+    bool test_log = true;
+
     double dt = (meas_package.timestamp_ - time_us_);
-    dt /= 1000000.0; // convert [us]->[s]
     time_us_ = meas_package.timestamp_;
 
+    if (test_log) {
+        std::cout << "----------1----------" << std::endl;
+        std::cout << "x_ " << std::endl << x_ << std::endl;
+        std::cout << "P_ " << std::endl << P_ << std::endl;
+    }
+
+    dt /= 1000000.0; // convert [us]->[s]
     Prediction(dt);
+
+    if (test_log) {
+        std::cout << "----------2----------" << std::endl;
+        std::cout << "x_ " << std::endl << x_ << std::endl;
+        std::cout << "P_ " << std::endl << P_ << std::endl;
+    }
 
     if (meas_package.sensor_type_ == MeasurementPackage::RADAR && use_radar_) {
             UpdateRadar(meas_package);
     }
     if (meas_package.sensor_type_ == MeasurementPackage::LASER && use_laser_) {
             UpdateLidar(meas_package);
+    }
+    if (test_log) {
+        std::cout << "----------3----------" << meas_package.sensor_type_<< std::endl;
+        std::cout << "x_ " << std::endl << x_ << std::endl;
+        std::cout << "P_ " << std::endl << P_ << std::endl;
     }
 }
 
@@ -202,6 +222,7 @@ void UKF::Prediction(double delta_t) {
     }
 
     // predict sigma points
+      bool deb_zero = false;
       for (int i = 0; i< 2*n_aug_+1; ++i) {
         // extract values for better readability
         double p_x = Xsig_aug(0,i);
@@ -222,6 +243,7 @@ void UKF::Prediction(double delta_t) {
         } else {
             px_p = p_x + v*delta_t*cos(yaw);
             py_p = p_y + v*delta_t*sin(yaw);
+            deb_zero = true;
         }
 
         double v_p = v;
@@ -243,6 +265,8 @@ void UKF::Prediction(double delta_t) {
         Xsig_pred_(3,i) = yaw_p;
         Xsig_pred_(4,i) = yawd_p;
       }
+//      if (deb_zero)
+//        std::cout << "Zero Xsig_aug" << std::endl << Xsig_aug << std::endl;
 
       // predicted state mean
       x_.fill(0.0);
@@ -375,6 +399,8 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
     // measurement covariance matrix S
     MatrixXd S = MatrixXd(n_z,n_z);
 
+    std::cout << "Xsig_pred_" << std::endl << Xsig_pred_ << std::endl;
+
     // transform sigma points into measurement space
      for (int i = 0; i < 2 * n_aug_ + 1; ++i) {  // 2n+1 simga points
        // extract values for better readability
@@ -392,6 +418,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
        Zsig(2,i) = (p_x*v1 + p_y*v2) / sqrt(p_x*p_x + p_y*p_y);   // r_dot
      }
 
+     std::cout << "Zsig" << std::endl << Zsig << std::endl;
      // mean predicted measurement
      for (int i = 0; i < 2*n_aug_+1; ++i) {
        z_pred = z_pred + weights_(i) * Zsig.col(i);
@@ -402,13 +429,37 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
      for (int i = 0; i < 2 * n_aug_ + 1; ++i) {  // 2n+1 simga points
        // residual
        VectorXd z_diff = Zsig.col(i) - z_pred;
+       std::cout << "init z_diff" << std::endl << z_diff << std::endl;
 
        // angle normalization
        while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
        while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
 
+       for (int j = 0; j < z_diff.size(); j++) {
+           if (std::fabs(z_diff(j)) < EPSILON) {
+               std::cout << "z_diff(" <<j<< ")="  << z_diff(j) << std::endl;
+               z_diff(j) = EPSILON;
+           }
+           if (std::fabs(z_diff(j)) > 10000000000) {
+               std::cout << "overflow z_diff(" <<j<< ")="  << z_diff(j) << std::endl;
+               z_diff(j) = EPSILON;
+           }
+           if (std::isnan(z_diff(j))) {
+               std::cout << "nan z_diff(" <<j<< ")="  << z_diff(j) << std::endl;
+               z_diff(j) = EPSILON;
+           }
+       }
+
+       std::cout << "z_diff" << std::endl << z_diff << std::endl;
+       std::cout << "z_diff.transp" << std::endl << z_diff.transpose() << std::endl;
        S = S + weights_(i) * z_diff * z_diff.transpose();
      }
+
+
+     std::cout << "//01///" << std::endl;
+     std::cout << "Sinv" << std::endl << S.inverse() << std::endl;
+     std::cout << "S" << std::endl << S << std::endl;
+     std::cout << "//02//" << std::endl;
 
      // add measurement noise covariance matrix
      MatrixXd R = MatrixXd(n_z, n_z);
@@ -418,6 +469,10 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
           0, 0,std_radrd_*std_radrd_;
 
      S = S + R;
+
+     std::cout << "Sinv" << std::endl << S.inverse() << std::endl;
+     std::cout << "S" << std::endl << S << std::endl;
+
 
      // create matrix for cross correlation Tc
      MatrixXd Tc = MatrixXd(n_x_, n_z);
@@ -429,6 +484,21 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
        // angle normalization
        while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
        while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
+
+       for (int j = 0; j < z_diff.size(); j++) {
+           if (std::fabs(z_diff(j)) < EPSILON) {
+               std::cout << "z_diff(" <<j<< ")="  << z_diff(j) << std::endl;
+               z_diff(j) = EPSILON;
+           }
+           if (std::fabs(z_diff(j)) > 10000000000) {
+               std::cout << "overflow z_diff(" <<j<< ")="  << z_diff(j) << std::endl;
+               z_diff(j) = EPSILON;
+           }
+           if (std::isnan(z_diff(j))) {
+               std::cout << "nan z_diff(" <<j<< ")="  << z_diff(j) << std::endl;
+               z_diff(j) = EPSILON;
+           }
+       }
 
        // state difference
        VectorXd x_diff = Xsig_pred_.col(i) - x_;
@@ -443,16 +513,35 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
      MatrixXd K = Tc * S.inverse();
 
      // residual
-     VectorXd z_diff = meas_package.raw_measurements_ - z_pred;
+     VectorXd z_difff = meas_package.raw_measurements_ - z_pred;
 
      // angle normalization
-     while (z_diff(1)> M_PI) z_diff(1)-=2.*M_PI;
-     while (z_diff(1)<-M_PI) z_diff(1)+=2.*M_PI;
+     while (z_difff(1)> M_PI) z_difff(1)-=2.*M_PI;
+     while (z_difff(1)<-M_PI) z_difff(1)+=2.*M_PI;
+
+     for (int j = 0; j < z_difff.size(); j++) {
+         if (std::fabs(z_difff(j)) < EPSILON) {
+             std::cout << "z_difff(" <<j<< ")="  << z_difff(j) << std::endl;
+             z_difff(j) = EPSILON;
+         }
+         if (std::fabs(z_difff(j)) > 10000000000) {
+             std::cout << "overflow z_difff(" <<j<< ")="  << z_difff(j) << std::endl;
+             z_difff(j) = EPSILON;
+         }
+         if (std::isnan(z_difff(j))) {
+             std::cout << "nan z_difff(" <<j<< ")="  << z_difff(j) << std::endl;
+             z_difff(j) = EPSILON;
+         }
+     }
 
      // calculate NIS
-     NIS_radar_ = z_diff.transpose() * S.inverse() * z_diff;
+     NIS_radar_ = z_difff.transpose() * S.inverse() * z_difff;
 
+
+     std::cout << "Tc" << std::endl << Tc << std::endl;
+     std::cout << "K" << std::endl << K << std::endl;
+     std::cout << "z_difff" << std::endl << z_difff << std::endl;
      // update state mean and covariance matrix
-     x_ = x_ + K * z_diff;
+     x_ = x_ + K * z_difff;
      P_ = P_ - K*S*K.transpose();
 }
